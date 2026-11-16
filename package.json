@@ -1,0 +1,26 @@
+{
+  "name": "hyperbolic-nil-space",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "cd core-wasm && npx -y wasm-pack build --target web --out-dir ../src/wasm",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test:unit": "npx tsx tests/nil_math.test.ts && npx tsx tests/interleaving.test.ts && npx tsx tests/hypergraph.test.ts",
+    "test:e2e": "npx tsx tests/e2e.test.ts",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "dependencies": {
+    "three": "^0.174.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.174.0",
+    "puppeteer": "^25.17.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0"
+  }
+}
