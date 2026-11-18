@@ -72,6 +72,7 @@ pub struct GeneratedHypergraphBuffer {
     edge_types: Vec<u32>,     // 0 = Penrose macro edge, 1 = random hyperedge
     triangle_ids: Vec<i32>,   // Triangle ID for each vertex (-1 if free)
     hyperedges: Vec<u32>,     // Packed: [size, v0, v1, v2, ...]
+    triangle_data: Vec<f32>,  // 20 floats per triangle: [id, cx, cy, cz, area, holonomy, pAx, pAy, pAz, pBx, pBy, pBz, pCx, pCy, pCz, camX, camY, camZ, tgtX, tgtY, tgtZ]
 }
 
 #[wasm_bindgen]
@@ -114,6 +115,70 @@ impl GeneratedHypergraphBuffer {
 
     pub fn get_hyperedges_len(&self) -> usize {
         self.hyperedges.len()
+    }
+
+    pub fn get_triangle_data_ptr(&self) -> *const f32 {
+        self.triangle_data.as_ptr()
+    }
+
+    pub fn get_triangle_data_len(&self) -> usize {
+        self.triangle_data.len()
+    }
+
+    /// Zero-copy TypedArray views directly into WebAssembly memory
+    pub fn get_positions_view(&self) -> js_sys::Float32Array {
+        unsafe { js_sys::Float32Array::view(&self.positions) }
+    }
+
+    pub fn get_edges_view(&self) -> js_sys::Uint32Array {
+        unsafe { js_sys::Uint32Array::view(&self.edge_indices) }
+    }
+
+    pub fn get_edge_types_view(&self) -> js_sys::Uint32Array {
+        unsafe { js_sys::Uint32Array::view(&self.edge_types) }
+    }
+
+    pub fn get_triangle_ids_view(&self) -> js_sys::Int32Array {
+        unsafe { js_sys::Int32Array::view(&self.triangle_ids) }
+    }
+
+    pub fn get_hyperedges_view(&self) -> js_sys::Uint32Array {
+        unsafe { js_sys::Uint32Array::view(&self.hyperedges) }
+    }
+
+    pub fn get_triangle_data_view(&self) -> js_sys::Float32Array {
+        unsafe { js_sys::Float32Array::view(&self.triangle_data) }
+    }
+}
+
+/// Exact closed-form Nil geodesic point evaluation: P(s)
+#[wasm_bindgen]
+pub fn evaluate_nil_geodesic_point(
+    x0: f32, y0: f32, z0: f32,
+    vx0: f32, vy0: f32, vz0: f32,
+    torsion: f32,
+    s: f32,
+) -> Vec<f32> {
+    let k = vz0 - torsion * x0 * vy0;
+    let omega = torsion * k;
+    if omega.abs() < 1e-6 {
+        let x = x0 + vx0 * s;
+        let y = y0 + vy0 * s;
+        let z = z0 + torsion * x0 * vy0 * s + 0.5 * torsion * vx0 * vy0 * s * s;
+        vec![x, y, z]
+    } else {
+        let sin_w = (omega * s).sin();
+        let cos_w = (omega * s).cos();
+        let x = x0 + (1.0 / omega) * (vx0 * sin_w + vy0 * (cos_w - 1.0));
+        let y = y0 + (1.0 / omega) * (-vx0 * (cos_w - 1.0) + vy0 * sin_w);
+        let a = x0 - vy0 / omega;
+        let term1 = a * (y - y0);
+        let vxy2 = vx0 * vx0 + vy0 * vy0;
+        let term2 = (vxy2 / (2.0 * omega)) * s;
+        let term3 = ((vy0 * vy0 - vx0 * vx0) / (4.0 * omega * omega)) * (2.0 * omega * s).sin();
+        let term4 = ((vx0 * vy0) / (2.0 * omega * omega)) * (1.0 - (2.0 * omega * s).cos());
+        let z = z0 + k * s + torsion * (term1 + term2 + term3 + term4);
+        vec![x, y, z]
     }
 }
 
@@ -160,6 +225,7 @@ pub fn generate_nil_penrose_hypergraph(
     let mut edge_types = Vec::new();
     let mut triangle_ids = Vec::new();
     let mut hyperedges = Vec::new();
+    let mut triangle_data = Vec::with_capacity(num_triangles * 20);
 
     // Height of equilateral triangle in XY plane
     let h = (3.0_f32).sqrt() * 0.5 * side_length;
@@ -194,6 +260,25 @@ pub fn generate_nil_penrose_hypergraph(
         let p_a = (cx - half_l, cy - h / 3.0 * orientation, base_z);
         let p_b = (cx + half_l, cy - h / 3.0 * orientation, base_z);
         let p_c = (cx, cy + (2.0 * h / 3.0) * orientation, base_z + holonomy_step * 0.5);
+
+        let center_z = base_z + holonomy_step * 0.25;
+        let loop_area = base_area * orientation;
+        let holonomy = torsion * loop_area;
+        let dist = side_length * 2.8;
+        let elev_angle = std::f32::consts::PI * 0.22;
+        let azim_angle = if orientation > 0.0 { std::f32::consts::PI * 0.25 } else { -std::f32::consts::PI * 0.25 };
+        let cam_x = cx + dist * elev_angle.cos() * azim_angle.sin();
+        let cam_y = cy - dist * elev_angle.cos() * azim_angle.cos();
+        let cam_z = center_z + dist * elev_angle.sin() + holonomy * 0.5;
+
+        triangle_data.extend_from_slice(&[
+            k as f32, cx, cy, center_z, loop_area, holonomy,
+            p_a.0, p_a.1, p_a.2,
+            p_b.0, p_b.1, p_b.2,
+            p_c.0, p_c.1, p_c.2,
+            cam_x, cam_y, cam_z,
+            cx, cy, center_z,
+        ]);
 
         // Subdivide each beam into 3 segments to allow Nil geodesic curving
         let corners = [p_a, p_b, p_c];
@@ -295,6 +380,7 @@ pub fn generate_nil_penrose_hypergraph(
         edge_types,
         triangle_ids,
         hyperedges,
+        triangle_data,
     }
 }
 
@@ -338,5 +424,15 @@ mod tests {
         assert_eq!(buffer.positions.len() % 3, 0);
         // Edges must have 2 u32 each
         assert_eq!(buffer.edge_indices.len() % 2, 0);
+    }
+
+    #[test]
+    fn test_geodesic_evaluation() {
+        let pt = evaluate_nil_geodesic_point(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 2.0);
+        assert_eq!(pt.len(), 3);
+        // Moving purely horizontally along x: y remains 0, z remains 0
+        assert!((pt[0] - 2.0).abs() < 1e-4);
+        assert!(pt[1].abs() < 1e-4);
+        assert!(pt[2].abs() < 1e-4);
     }
 }
