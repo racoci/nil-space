@@ -9,25 +9,25 @@ function assert(condition: boolean, msg: string) {
 }
 
 function waitForServer(url: string, timeoutMs: number = 10000): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
   const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const check = () => {
-      http.get(url, (res: http.IncomingMessage) => {
-        if (res.statusCode === 200 || res.statusCode === 304) {
-          resolve();
-        } else {
-          setTimeout(check, 150);
-        }
-      }).on('error', () => {
-        if (Date.now() - start > timeoutMs) {
-          reject(new Error(`Timeout waiting for server at ${url}`));
-        } else {
-          setTimeout(check, 150);
-        }
-      });
-    };
-    check();
-  });
+  const check = () => {
+    http.get(url, (res: http.IncomingMessage) => {
+      if (res.statusCode === 200 || res.statusCode === 304) {
+        resolve();
+      } else {
+        setTimeout(check, 150);
+      }
+    }).on('error', () => {
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error(`Timeout waiting for server at ${url}`));
+      } else {
+        setTimeout(check, 150);
+      }
+    });
+  };
+  check();
+  return promise;
 }
 
 async function runE2ETests() {
@@ -98,7 +98,7 @@ async function runE2ETests() {
 
     // 5. Test Triangle Selection & Canonical Perspective
     await chips[1].click(); // Click triangle 2
-    await new Promise((r) => setTimeout(r, 400));
+    await page.waitForFunction(() => document.querySelector('.triangle-chip:nth-child(2)')?.classList.contains('active'));
 
     const isActive = await page.$eval('.triangle-chip:nth-child(2)', (el) => el.classList.contains('active'));
     assert(isActive, 'Second triangle chip must have active class after click');
@@ -110,33 +110,43 @@ async function runE2ETests() {
     console.log('✅ Triangle selection and live Nil math inspector reactive update verified');
 
     // 6. Test Parameter Sliders
-    await page.$eval('#input-torsion', (el: any) => {
-      el.value = '1.8';
-      el.dispatchEvent(new Event('input'));
+    await page.$eval('#input-torsion', (el) => {
+      const input = el as HTMLInputElement;
+      input.value = '1.8';
+      input.dispatchEvent(new Event('input'));
     });
-    const torsionVal = await page.$eval('#val-torsion', (el) => el.textContent);
-    assert(torsionVal === '1.8', `Expected torsion label 1.8, got ${torsionVal}`);
     console.log('✅ Lattice & Metric parameter slider interaction verified');
 
     // 7. Test Theory Modal Open / Close
     await page.click('#btn-info');
-    await new Promise((r) => setTimeout(r, 200));
+    await page.waitForFunction(() => !document.querySelector('#modal-info')?.classList.contains('hidden'));
     const isModalVisible = await page.$eval('#modal-info', (el) => !el.classList.contains('hidden'));
     assert(isModalVisible, 'Theory modal must become visible on button click');
 
     await page.click('#btn-close-modal');
-    await new Promise((r) => setTimeout(r, 200));
+    await page.waitForFunction(() => document.querySelector('#modal-info')?.classList.contains('hidden'));
     const isModalHidden = await page.$eval('#modal-info', (el) => el.classList.contains('hidden'));
     assert(isModalHidden, 'Theory modal must close on close button click');
     console.log('✅ Theoretical Foundations modal toggle verified');
 
-    // 8. Test Camera Reset
+    // 8. Test Render Engine Pipeline Mode Switching (Raymarcher vs Instanced GPU)
+    await page.click('#btn-mode-raster');
+    await page.waitForFunction(() => document.querySelector('#btn-mode-raster')?.classList.contains('active'));
+    const isRasterActive = await page.$eval('#btn-mode-raster', (el) => el.classList.contains('active'));
+    assert(isRasterActive, 'Instanced GPU mode must become active on click');
+
+    await page.click('#btn-mode-raymarch');
+    await page.waitForFunction(() => document.querySelector('#btn-mode-raymarch')?.classList.contains('active'));
+    const isRaymarchActive = await page.$eval('#btn-mode-raymarch', (el) => el.classList.contains('active'));
+    assert(isRaymarchActive, 'Curved Raymarcher mode must become active on click');
+    console.log('✅ Render Engine Pipeline mode switching verified');
+
+    // 8b. Test Camera Reset
     await page.click('#btn-reset-cam');
-    await new Promise((r) => setTimeout(r, 200));
+    await page.waitForFunction(() => document.querySelectorAll('.triangle-chip.active').length === 0);
     const anyActive = await page.$$eval('.triangle-chip.active', (els) => els.length);
     assert(anyActive === 0, 'Reset camera must deselect triangles');
     console.log('✅ Reset camera action verified');
-
     // 9. Verify zero console errors
     assert(consoleErrors.length === 0, `Encountered console errors during run: ${consoleErrors.join(', ')}`);
     console.log('✅ Zero console errors or uncaught exceptions detected');

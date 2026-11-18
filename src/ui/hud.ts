@@ -1,4 +1,5 @@
 import type { HypergraphState, HypergraphGeneratorConfig } from '../hypergraph/types';
+import type { RenderMode } from '../rendering/pipeline';
 
 export class NilHUD {
   private container: HTMLElement;
@@ -6,11 +7,21 @@ export class NilHUD {
   public onConfigChange: ((config: HypergraphGeneratorConfig) => void) | null = null;
   public onSelectTriangle: ((triId: number) => void) | null = null;
   public onResetCamera: (() => void) | null = null;
+  public onRenderModeChange: ((mode: RenderMode) => void) | null = null;
 
   // Cached DOM elements
   private triangleListEl!: HTMLElement;
   private mathInspectorEl!: HTMLElement;
   private infoModalEl!: HTMLElement;
+  private perfBadgeEl!: HTMLElement;
+  private btnModeNewton!: HTMLElement;
+  private btnModeRaymarch!: HTMLElement;
+  private btnModeEuclid!: HTMLElement;
+
+  private currentRenderMode: RenderMode = 'raster_newton';
+  public get renderMode(): RenderMode {
+    return this.currentRenderMode;
+  }
 
   private currentConfig: HypergraphGeneratorConfig = {
     numTriangles: 6,
@@ -31,6 +42,18 @@ export class NilHUD {
     this.updateHUD();
   }
 
+  public updatePerformance(fps: number, frameTimeMs: number, mode: RenderMode): void {
+    if (this.perfBadgeEl) {
+      const modeLabel =
+        mode === 'raster_newton'
+          ? 'Native Nil Safe-Newton (GPU)'
+          : mode === 'raymarch'
+          ? 'Curved Raymarcher (ODE)'
+          : 'Euclidean Ambient';
+      this.perfBadgeEl.textContent = `${fps} FPS · ${frameTimeMs.toFixed(1)}ms · ${modeLabel}`;
+    }
+  }
+
   private buildHUD(): void {
     this.container.innerHTML = `
       <div class="hud-layer">
@@ -42,6 +65,7 @@ export class NilHUD {
             <span class="brand-sub">Non-Euclidean Hypergraph Substrate · Nil Geometry & Penrose Tribar</span>
           </div>
           <div class="header-actions">
+            <div id="hud-perf-badge" class="perf-badge">60 FPS · Initializing...</div>
             <button id="btn-info" class="btn-ghost" title="Theoretical Foundations">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
               <span>Math & Theory</span>
@@ -55,6 +79,25 @@ export class NilHUD {
 
         <!-- Left Panel: Triangle Navigator & Math Inspector -->
         <aside class="hud-sidebar glass-panel">
+          <!-- Render Pipeline Selector -->
+          <div class="panel-section">
+            <div class="section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 19 21 12 17 5 21 12 2"></polygon></svg>
+              <span>Render Engine Pipeline</span>
+            </div>
+            <div class="mode-toggle-group">
+              <button id="btn-mode-newton" class="mode-toggle-btn active" title="Native Nil Safe-Newton Inverse Exponential Vertex Shader">
+                Safe Newton (GPU)
+              </button>
+              <button id="btn-mode-raymarch" class="mode-toggle-btn" title="Curved Nil Geodesic Raymarching Shader">
+                Raymarch (ODE)
+              </button>
+              <button id="btn-mode-euclid" class="mode-toggle-btn" title="Euclidean Perspective Baseline">
+                Euclid Ambient
+              </button>
+            </div>
+          </div>
+
           <div class="panel-section">
             <div class="section-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 22 22 22"></polygon></svg>
@@ -137,16 +180,9 @@ export class NilHUD {
                 When the Penrose triangle is embedded in Nil space, the area enclosed by its 3 beams generates a vertical holonomy shift that <strong>exactly cancels the Euclidean elevation gap</strong>. The three beams meet seamlessly into a single 3D closed loop without any breaks or shears!
               </p>
 
-              <h3>3. Natural Chiral Interleaving</h3>
+              <h3>3. Real-Time Geodesic Shader Pipeline</h3>
               <p>
-                To interleave multiple triangles, we alternate chiral orientation:
-                <strong>&Delta; (Area &gt; 0, +&Delta;z)</strong> and <strong>&nabla; (Area &lt; 0, -&Delta;z)</strong>.
-                This balances the total topological flux to zero across macro-cells and allows triangles to interpenetrate along screw axes like interlocking chain links.
-              </p>
-
-              <h3>4. Future Direction: Hyperbolic-Nil Space</h3>
-              <p>
-                Future steps include warping the Nil metric with negative Riemannian sectional curvatures (Solv geometry and SL̃₂(ℝ)), bridging Nil space and Hyperbolic space (ℍ³ / ℍ² &times; ℝ) to plot hyper-graphs across higher-dimensional non-Euclidean geometries.
+                This application renders Nil space in real time using a custom WebGL2 shader pipeline. In <strong>Curved Geodesic Raymarching</strong> mode, the GPU fragment shader solves the exact closed-form Nil geodesic ODEs per pixel, bending light rays along the Heisenberg contact connection so you can observe the genuine non-Euclidean optical warping.
               </p>
             </div>
           </div>
@@ -157,6 +193,10 @@ export class NilHUD {
     this.triangleListEl = this.container.querySelector('#triangle-buttons')!;
     this.mathInspectorEl = this.container.querySelector('#math-inspector')!;
     this.infoModalEl = this.container.querySelector('#modal-info')!;
+    this.perfBadgeEl = this.container.querySelector('#hud-perf-badge')!;
+    this.btnModeNewton = this.container.querySelector('#btn-mode-newton')!;
+    this.btnModeRaymarch = this.container.querySelector('#btn-mode-raymarch')!;
+    this.btnModeEuclid = this.container.querySelector('#btn-mode-euclid')!;
 
     this.bindEvents();
   }
@@ -174,6 +214,21 @@ export class NilHUD {
     btnResetCam.addEventListener('click', () => {
       if (this.onResetCamera) this.onResetCamera();
     });
+
+    // Render Mode Toggle: 3 Modes
+    const setMode = (mode: RenderMode) => {
+      this.currentRenderMode = mode;
+      this.btnModeNewton.classList.toggle('active', mode === 'raster_newton');
+      this.btnModeRaymarch.classList.toggle('active', mode === 'raymarch');
+      this.btnModeEuclid.classList.toggle('active', mode === 'raster_euclid');
+      if (this.onRenderModeChange) {
+        this.onRenderModeChange(mode);
+      }
+    };
+
+    this.btnModeNewton.addEventListener('click', () => setMode('raster_newton'));
+    this.btnModeRaymarch.addEventListener('click', () => setMode('raymarch'));
+    this.btnModeEuclid.addEventListener('click', () => setMode('raster_euclid'));
 
     // Sliders
     const inputTriangles = this.container.querySelector('#input-triangles') as HTMLInputElement;
@@ -234,7 +289,7 @@ export class NilHUD {
     }
 
     // 2. Render Math Inspector
-    const activeTri = this.state.triangles.find(t => t.id === this.state?.selectedTriangleId);
+    const activeTri = this.state.triangles.find((t) => t.id === this.state?.selectedTriangleId);
     if (activeTri) {
       this.mathInspectorEl.innerHTML = `
         <div class="math-row">

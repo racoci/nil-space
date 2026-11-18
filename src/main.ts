@@ -1,15 +1,15 @@
 import './style.css';
-import { NilSceneRenderer } from './rendering/scene';
+import { NilRenderPipeline } from './rendering/pipeline';
 import { NilPicker } from './rendering/picking';
 import { NilHUD } from './ui/hud';
 import { generateNilHypergraph } from './hypergraph/generator';
 import type { HypergraphGeneratorConfig, HypergraphState } from './hypergraph/types';
-import * as THREE from 'three';
+import { initNilWasm } from './wasm/loader';
 
 class HyperbolicNilApp {
   private canvasContainer: HTMLElement;
   private hudContainer: HTMLElement;
-  private sceneRenderer: NilSceneRenderer;
+  private pipeline: NilRenderPipeline;
   private picker: NilPicker;
   private hud: NilHUD;
   private currentState: HypergraphState;
@@ -27,11 +27,11 @@ class HyperbolicNilApp {
     this.canvasContainer = document.getElementById('canvas-container')!;
     this.hudContainer = document.getElementById('hud-container')!;
 
-    // 1. Initialize Scene & Renderer
-    this.sceneRenderer = new NilSceneRenderer(this.canvasContainer);
+    // 1. Initialize High-Performance From-Scratch WebGL2 Render Pipeline
+    this.pipeline = new NilRenderPipeline(this.canvasContainer);
 
-    // 2. Initialize Picker
-    this.picker = new NilPicker(this.sceneRenderer);
+    // 2. Initialize Screen-Space Raycaster Picker
+    this.picker = new NilPicker(this.pipeline);
 
     // 3. Initialize HUD
     this.hud = new NilHUD(this.hudContainer);
@@ -43,17 +43,34 @@ class HyperbolicNilApp {
     // 5. Connect event handlers
     this.bindEvents();
 
-    // 6. Start animation loop
+    // 6. Connect Realtime Performance Monitor
+    this.pipeline.onPerformanceUpdate = (fps, frameTimeMs) => {
+      this.hud.updatePerformance(fps, frameTimeMs, this.pipeline.renderMode);
+    };
+
+    // 7. Initialize WebAssembly module asynchronously
+    initNilWasm().then((loaded) => {
+      if (loaded) {
+        console.log('⚡ Rust WebAssembly Nil engine activated');
+      }
+    });
+
+    // 8. Start Real-Time Animation Loop
     this.animate();
   }
 
   private syncState(): void {
-    this.sceneRenderer.setHypergraph(this.currentState);
+    this.pipeline.setHypergraph(this.currentState);
     this.picker.setState(this.currentState);
     this.hud.setState(this.currentState);
   }
 
   private bindEvents(): void {
+    // Render pipeline mode change (Raymarching vs Instanced)
+    this.hud.onRenderModeChange = (mode) => {
+      this.pipeline.setRenderMode(mode);
+    };
+
     // Config change from HUD sliders
     this.hud.onConfigChange = (newConfig) => {
       this.config = newConfig;
@@ -63,7 +80,7 @@ class HyperbolicNilApp {
 
     // Triangle selection from HUD chips
     this.hud.onSelectTriangle = (triId) => {
-      this.sceneRenderer.snapToTriangle(triId);
+      this.pipeline.snapToTriangle(triId);
       this.hud.setState(this.currentState);
     };
 
@@ -71,12 +88,12 @@ class HyperbolicNilApp {
     this.hud.onResetCamera = () => {
       this.currentState.selectedTriangleId = null;
       this.currentState.selectedNodeId = null;
-      this.sceneRenderer.updateVisualStyles();
+      this.pipeline.updateVisualStyles();
       this.hud.setState(this.currentState);
 
-      this.sceneRenderer.cameraController.animateTo({
-        position: new THREE.Vector3(20, -22, 18),
-        target: new THREE.Vector3(0, 0, 0)
+      this.pipeline.cameraController.animateTo({
+        position: { x: 20, y: -22, z: 18 },
+        target: { x: 0, y: 0, z: 0 }
       }, 1000);
     };
 
@@ -89,7 +106,7 @@ class HyperbolicNilApp {
 
   private animate = (): void => {
     requestAnimationFrame(this.animate);
-    this.sceneRenderer.render();
+    this.pipeline.render();
   };
 }
 

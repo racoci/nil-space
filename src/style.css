@@ -121,6 +121,53 @@ body, html {
   color: #fff;
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
+.perf-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 255, 230, 0.08);
+  border: 1px solid rgba(0, 255, 230, 0.25);
+  color: var(--cyan-glow);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mode-toggle-group {
+  display: flex;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mode-toggle-btn {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-toggle-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mode-toggle-btn.active {
+  background: rgba(0, 255, 230, 0.18);
+  border-color: var(--cyan-glow);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 255, 230, 0.25);
+}
 
 /* Sidebar */
 .hud-sidebar {
