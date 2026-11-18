@@ -1,19 +1,19 @@
-import * as THREE from 'three';
-import type { NilSceneRenderer } from './scene';
 import type { HypergraphState } from '../hypergraph/types';
+import type { NilRenderPipeline } from './pipeline';
+import { Ray3 } from './math';
 
+/**
+ * Zero-dependency Screen-Space Raycaster & Nil Interaction Picker
+ */
 export class NilPicker {
-  private renderer: NilSceneRenderer;
-  private raycaster = new THREE.Raycaster();
-  private pointer = new THREE.Vector2();
+  private pipeline: NilRenderPipeline;
   private state: HypergraphState | null = null;
+  private ray = new Ray3();
+  private pointerNdc = { x: 0, y: 0 };
   public onSelectionChange: ((state: HypergraphState) => void) | null = null;
 
-  constructor(renderer: NilSceneRenderer) {
-    this.renderer = renderer;
-    this.raycaster.params.Points = { threshold: 0.5 };
-    this.raycaster.params.Line = { threshold: 0.3 };
-
+  constructor(pipeline: NilRenderPipeline) {
+    this.pipeline = pipeline;
     this.setupListeners();
   }
 
@@ -22,50 +22,54 @@ export class NilPicker {
   }
 
   private setupListeners(): void {
-    const dom = this.renderer.renderer.domElement;
+    const dom = this.pipeline.canvas;
 
-    dom.addEventListener('pointermove', (e) => {
+    dom.addEventListener('pointermove', (e: PointerEvent) => {
       const rect = dom.getBoundingClientRect();
-      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      this.pointerNdc.x = (x / rect.width) * 2.0 - 1.0;
+      this.pointerNdc.y = -((y / rect.height) * 2.0 - 1.0);
 
       this.handleHover();
     });
 
-    dom.addEventListener('click', (e) => {
-      const rect = dom.getBoundingClientRect();
-      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
+    dom.addEventListener('click', () => {
       this.handleClick();
     });
   }
 
+  private updateRay(): void {
+    this.ray.setFromCamera(
+      this.pointerNdc.x,
+      this.pointerNdc.y,
+      this.pipeline.cameraController.invViewProjMatrix
+    );
+  }
+
   private handleHover(): void {
     if (!this.state) return;
-    this.raycaster.setFromCamera(this.pointer, this.renderer.camera);
+    this.updateRay();
 
-    // Raycast against triangles and nodes
     let hoveredTriId: number | null = null;
     let hoveredNodeId: number | null = null;
 
-    // Check intersection with triangle membranes
-    const intersects = this.raycaster.intersectObjects(this.renderer.scene.children, false);
-    for (const hit of intersects) {
-      if (hit.object.userData && typeof hit.object.userData.triangleId === 'number') {
-        hoveredTriId = hit.object.userData.triangleId;
-        break;
+    // 1. Raycast against triangle membranes
+    let closestTriDist = Infinity;
+    for (const tri of this.state.triangles) {
+      const hitDist = this.ray.intersectTriangle(tri.corners[0], tri.corners[1], tri.corners[2]);
+      if (hitDist !== null && hitDist < closestTriDist) {
+        closestTriDist = hitDist;
+        hoveredTriId = tri.id;
       }
     }
 
-    // Check closest node proximity
-    const ray = this.raycaster.ray;
-    let minDistance = 0.6;
+    // 2. Proximity against nodes
+    let minNodeDist = 0.65;
     for (const node of this.state.nodes) {
-      const nodePos = new THREE.Vector3(node.x, node.y, node.z);
-      const dist = ray.distanceToPoint(nodePos);
-      if (dist < minDistance) {
-        minDistance = dist;
+      const dist = this.ray.distanceToPoint(node);
+      if (dist < minNodeDist) {
+        minNodeDist = dist;
         hoveredNodeId = node.id;
         if (node.triangleId >= 0 && hoveredTriId === null) {
           hoveredTriId = node.triangleId;
@@ -73,62 +77,66 @@ export class NilPicker {
       }
     }
 
-    if (this.state.hoveredTriangleId !== hoveredTriId || this.state.hoveredNodeId !== hoveredNodeId) {
+    if (
+      this.state.hoveredTriangleId !== hoveredTriId ||
+      this.state.hoveredNodeId !== hoveredNodeId
+    ) {
       this.state.hoveredTriangleId = hoveredTriId;
       this.state.hoveredNodeId = hoveredNodeId;
-      this.renderer.updateVisualStyles();
+      this.pipeline.updateVisualStyles();
+
+      if (this.onSelectionChange) {
+        this.onSelectionChange(this.state);
+      }
     }
   }
 
   private handleClick(): void {
     if (!this.state) return;
-    this.raycaster.setFromCamera(this.pointer, this.renderer.camera);
+    this.updateRay();
 
     let clickedTriId: number | null = null;
     let clickedNodeId: number | null = null;
 
-    // 1. Check membranes
-    const intersects = this.raycaster.intersectObjects(this.renderer.scene.children, false);
-    for (const hit of intersects) {
-      if (hit.object.userData && typeof hit.object.userData.triangleId === 'number') {
-        clickedTriId = hit.object.userData.triangleId;
-        break;
+    // 1. Intersect triangle membranes
+    let closestTriDist = Infinity;
+    for (const tri of this.state.triangles) {
+      const hitDist = this.ray.intersectTriangle(tri.corners[0], tri.corners[1], tri.corners[2]);
+      if (hitDist !== null && hitDist < closestTriDist) {
+        closestTriDist = hitDist;
+        clickedTriId = tri.id;
       }
     }
 
     // 2. Check closest node
-    const ray = this.raycaster.ray;
-    let minDistance = 0.7;
+    let minDistance = 0.75;
     for (const node of this.state.nodes) {
-      const nodePos = new THREE.Vector3(node.x, node.y, node.z);
-      const dist = ray.distanceToPoint(nodePos);
+      const dist = this.ray.distanceToPoint(node);
       if (dist < minDistance) {
         minDistance = dist;
         clickedNodeId = node.id;
-        if (node.triangleId >= 0) {
+        if (node.triangleId >= 0 && clickedTriId === null) {
           clickedTriId = node.triangleId;
         }
       }
     }
 
     if (clickedTriId !== null) {
-      // Toggle or select triangle
       if (this.state.selectedTriangleId === clickedTriId) {
         this.state.selectedTriangleId = null;
         this.state.selectedNodeId = null;
-        this.renderer.updateVisualStyles();
+        this.pipeline.updateVisualStyles();
       } else {
-        this.renderer.snapToTriangle(clickedTriId);
+        this.pipeline.snapToTriangle(clickedTriId);
       }
     } else if (clickedNodeId !== null) {
       this.state.selectedNodeId = clickedNodeId;
       this.state.selectedTriangleId = null;
-      this.renderer.updateVisualStyles();
+      this.pipeline.updateVisualStyles();
     } else {
-      // Deselect all
       this.state.selectedTriangleId = null;
       this.state.selectedNodeId = null;
-      this.renderer.updateVisualStyles();
+      this.pipeline.updateVisualStyles();
     }
 
     if (this.onSelectionChange) {
