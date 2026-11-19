@@ -182,6 +182,121 @@ pub fn evaluate_nil_geodesic_point(
     }
 }
 
+/// Computes the inverse exponential map in Nil geometry using Safe Newton-Raphson.
+/// Given a point (hx, hy, hz) in Nil space relative to the camera, computes the initial
+/// tangent velocity vector (vx, vy, vz) such that the geodesic exp(v) = h.
+/// This determines the exact visual angle and distance under non-Euclidean light propagation.
+#[wasm_bindgen]
+pub fn nil_inverse_exp_newton(hx: f32, hy: f32, hz: f32) -> Vec<f32> {
+    let r2 = hx * hx + hy * hy;
+    if r2 < 1e-12 {
+        return vec![hx, hy, hz, 1.0];
+    }
+
+    let b2 = 0.25 * r2;
+    let b = b2.sqrt();
+    let side = hz - 0.5 * hx * hy;
+
+    if side.abs() < 1e-6 {
+        return vec![hx, hy, 0.0, 1.0];
+    }
+
+    let (w_min, w_max) = if side > 0.0 {
+        (0.0001, std::f32::consts::PI * 2.0 - 0.001)
+    } else {
+        (-std::f32::consts::PI * 2.0 + 0.001, -0.0001)
+    };
+
+    // 1. Initial guess via 1st order Taylor expansion around w=0
+    let mut w = (side / (b2 / 3.0 + 1.0)).clamp(w_min, w_max);
+
+    // 2. Safe Newton-Raphson with interval clamping (3 iterations)
+    for _ in 0..3 {
+        let (gw, dgw) = if w.abs() < 0.1 {
+            let w2 = w * w;
+            (w * (1.0 / 3.0 + w2 / 90.0), 1.0 / 3.0 + w2 / 30.0)
+        } else {
+            let cw = w.cos();
+            let sw = w.sin();
+            let den = 1.0 - cw;
+            ((w - sw) / den, (2.0 * den - w * sw) / (den * den))
+        };
+
+        let f = b2 * gw + w - side;
+        let df = b2 * dgw + 1.0;
+        let step = f / df;
+        w = (w - step).clamp(w_min, w_max);
+    }
+
+    let alpha_total = hy.atan2(hx);
+    let alpha = alpha_total - w * 0.5;
+    let c = b / (w * 0.5).sin();
+
+    vec![c * w * alpha.cos(), c * w * alpha.sin(), w, 1.0]
+}
+
+/// Bisection implementation (HyperRogue baseline) for testing & benchmark comparison
+#[wasm_bindgen]
+pub fn nil_inverse_exp_bisection(hx: f32, hy: f32, hz: f32, iterations: usize) -> Vec<f32> {
+    let r2 = hx * hx + hy * hy;
+    if r2 < 1e-12 {
+        return vec![hx, hy, hz, 1.0];
+    }
+
+    let b2 = 0.25 * r2;
+    let b = b2.sqrt();
+    let side = hz - 0.5 * hx * hy;
+
+    if side.abs() < 1e-6 {
+        return vec![hx, hy, 0.0, 1.0];
+    }
+
+    let (mut w_min, mut w_max) = if side > 0.0 {
+        (0.0, std::f32::consts::PI * 2.0)
+    } else {
+        (-std::f32::consts::PI * 2.0, 0.0)
+    };
+
+    for _ in 0..iterations {
+        let w = (w_min + w_max) * 0.5;
+        let gw = if w.abs() < 0.1 {
+            w * (1.0 / 3.0 + w * w / 90.0)
+        } else {
+            (w - w.sin()) / (1.0 - w.cos())
+        };
+        let z = b2 * gw + w;
+        if side > z {
+            w_min = w;
+        } else {
+            w_max = w;
+        }
+    }
+
+    let w = (w_min + w_max) * 0.5;
+    let alpha_total = hy.atan2(hx);
+    let alpha = alpha_total - w * 0.5;
+    let c = b / (w * 0.5).sin();
+
+    vec![c * w * alpha.cos(), c * w * alpha.sin(), w, 1.0]
+}
+
+/// Batch transform vertex buffer using Safe Newton inverse exponential map
+#[wasm_bindgen]
+pub fn batch_nil_inverse_exp_newton(vertices: &[f32]) -> Vec<f32> {
+    let count = vertices.len() / 3;
+    let mut out = Vec::with_capacity(count * 3);
+    for i in 0..count {
+        let hx = vertices[i * 3];
+        let hy = vertices[i * 3 + 1];
+        let hz = vertices[i * 3 + 2];
+        let v = nil_inverse_exp_newton(hx, hy, hz);
+        out.push(v[0]);
+        out.push(v[1]);
+        out.push(v[2]);
+    }
+    out
+}
+
 /// Simple deterministic PRNG (PCG/Mulberry32-style) for reproducible pseudo-random generation
 struct SimpleRng {
     state: u32,
@@ -424,6 +539,40 @@ mod tests {
         assert_eq!(buffer.positions.len() % 3, 0);
         // Edges must have 2 u32 each
         assert_eq!(buffer.edge_indices.len() % 2, 0);
+    }
+
+    #[test]
+    fn test_inverse_exp_newton_vs_bisection() {
+        // Test various points across Nil space
+        let test_points = [
+            (1.0, 2.0, 1.5),
+            (2.5, -1.2, 3.8),
+            (-1.8, -2.1, -2.4),
+            (0.5, 0.5, 0.125), // near horizontal
+            (3.0, 1.0, 6.0),
+        ];
+
+        for (hx, hy, hz) in test_points {
+            let v_newton = nil_inverse_exp_newton(hx, hy, hz);
+            let v_bisection = nil_inverse_exp_bisection(hx, hy, hz, 50);
+
+            // Newton in 3 iterations must match 50-step Bisection within floating point tolerance
+            let diff_x = (v_newton[0] - v_bisection[0]).abs();
+            let diff_y = (v_newton[1] - v_bisection[1]).abs();
+            let diff_w = (v_newton[2] - v_bisection[2]).abs();
+
+            assert!(diff_x < 1e-4, "Newton vs Bisection X mismatch at ({}, {}, {}): {}", hx, hy, hz, diff_x);
+            assert!(diff_y < 1e-4, "Newton vs Bisection Y mismatch at ({}, {}, {}): {}", hx, hy, hz, diff_y);
+            assert!(diff_w < 1e-4, "Newton vs Bisection W mismatch at ({}, {}, {}): {}", hx, hy, hz, diff_w);
+        }
+    }
+
+    #[test]
+    fn test_inverse_exp_newton_near_zero() {
+        let v = nil_inverse_exp_newton(0.0001, 0.0001, 0.00001);
+        assert!(v[0].is_finite());
+        assert!(v[1].is_finite());
+        assert!(v[2].is_finite());
     }
 
     #[test]

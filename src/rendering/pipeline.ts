@@ -10,7 +10,7 @@ import {
   createShaderProgram
 } from './shaders';
 
-export type RenderMode = 'raymarch' | 'raster_newton' | 'raster_euclid';
+export type RenderMode = 'raymarch' | 'raster';
 
 export class NilRenderPipeline {
   public container: HTMLElement;
@@ -18,7 +18,7 @@ export class NilRenderPipeline {
   public gl: WebGL2RenderingContext | null = null;
   public cameraController: SmoothCameraController;
 
-  public renderMode: RenderMode = 'raster_newton';
+  public renderMode: RenderMode = 'raymarch';
   public onPerformanceUpdate: ((fps: number, frameTimeMs: number) => void) | null = null;
 
   // Cached state
@@ -49,20 +49,9 @@ export class NilRenderPipeline {
 
   // Uniform Locations - Raster
   private uNodeViewProj: WebGLUniformLocation | null = null;
-  private uNodeView: WebGLUniformLocation | null = null;
-  private uNodeProj: WebGLUniformLocation | null = null;
-  private uNodeCamPos: WebGLUniformLocation | null = null;
-  private uNodeTorsion: WebGLUniformLocation | null = null;
-  private uNodeEnableNewton: WebGLUniformLocation | null = null;
   private uNodeSelNode: WebGLUniformLocation | null = null;
   private uNodeActiveTri: WebGLUniformLocation | null = null;
-
   private uEdgeViewProj: WebGLUniformLocation | null = null;
-  private uEdgeView: WebGLUniformLocation | null = null;
-  private uEdgeProj: WebGLUniformLocation | null = null;
-  private uEdgeCamPos: WebGLUniformLocation | null = null;
-  private uEdgeTorsion: WebGLUniformLocation | null = null;
-  private uEdgeEnableNewton: WebGLUniformLocation | null = null;
   private uEdgeActiveTri: WebGLUniformLocation | null = null;
 
   // Buffers & VAOs
@@ -141,22 +130,12 @@ export class NilRenderPipeline {
       // 2. Instanced Node Program
       this.nodeProgram = createShaderProgram(gl, INSTANCED_NODE_VERT, INSTANCED_NODE_FRAG);
       this.uNodeViewProj = gl.getUniformLocation(this.nodeProgram, 'u_viewProj');
-      this.uNodeView = gl.getUniformLocation(this.nodeProgram, 'u_view');
-      this.uNodeProj = gl.getUniformLocation(this.nodeProgram, 'u_proj');
-      this.uNodeCamPos = gl.getUniformLocation(this.nodeProgram, 'u_cameraPos');
-      this.uNodeTorsion = gl.getUniformLocation(this.nodeProgram, 'u_torsion');
-      this.uNodeEnableNewton = gl.getUniformLocation(this.nodeProgram, 'u_enableNewton');
       this.uNodeSelNode = gl.getUniformLocation(this.nodeProgram, 'u_selectedNodeId');
       this.uNodeActiveTri = gl.getUniformLocation(this.nodeProgram, 'u_activeTriangleId');
 
       // 3. Edge Program
       this.edgeProgram = createShaderProgram(gl, EDGE_VERT, EDGE_FRAG);
       this.uEdgeViewProj = gl.getUniformLocation(this.edgeProgram, 'u_viewProj');
-      this.uEdgeView = gl.getUniformLocation(this.edgeProgram, 'u_view');
-      this.uEdgeProj = gl.getUniformLocation(this.edgeProgram, 'u_proj');
-      this.uEdgeCamPos = gl.getUniformLocation(this.edgeProgram, 'u_cameraPos');
-      this.uEdgeTorsion = gl.getUniformLocation(this.edgeProgram, 'u_torsion');
-      this.uEdgeEnableNewton = gl.getUniformLocation(this.edgeProgram, 'u_enableNewton');
       this.uEdgeActiveTri = gl.getUniformLocation(this.edgeProgram, 'u_activeTriangleId');
 
       // Setup Geometry Buffers
@@ -506,12 +485,6 @@ export class NilRenderPipeline {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // Additive cyber glow
 
     const vp = this.cameraController.viewProjMatrix.elements;
-    const view = this.cameraController.viewMatrix.elements;
-    const proj = this.cameraController.projectionMatrix.elements;
-    const camPos = this.cameraController.position;
-    const enableNewton = this.renderMode === 'raster_newton' ? 1.0 : 0.0;
-    const torsion = 1.0;
-
     const activeTri = this.currentState?.selectedTriangleId ?? (this.currentState?.hoveredTriangleId ?? -1);
     const selNode = this.currentState?.selectedNodeId ?? -1;
 
@@ -519,11 +492,6 @@ export class NilRenderPipeline {
     if (this.edgeProgram && this.edgeVAO && this.edgeVertexCount > 0) {
       gl.useProgram(this.edgeProgram);
       gl.uniformMatrix4fv(this.uEdgeViewProj, false, vp);
-      gl.uniformMatrix4fv(this.uEdgeView, false, view);
-      gl.uniformMatrix4fv(this.uEdgeProj, false, proj);
-      gl.uniform3f(this.uEdgeCamPos, camPos.x, camPos.y, camPos.z);
-      gl.uniform1f(this.uEdgeTorsion, torsion);
-      gl.uniform1f(this.uEdgeEnableNewton, enableNewton);
       gl.uniform1i(this.uEdgeActiveTri, activeTri);
 
       gl.bindVertexArray(this.edgeVAO);
@@ -535,11 +503,6 @@ export class NilRenderPipeline {
     if (this.nodeProgram && this.nodeVAO && this.currentState && this.currentState.nodes.length > 0) {
       gl.useProgram(this.nodeProgram);
       gl.uniformMatrix4fv(this.uNodeViewProj, false, vp);
-      gl.uniformMatrix4fv(this.uNodeView, false, view);
-      gl.uniformMatrix4fv(this.uNodeProj, false, proj);
-      gl.uniform3f(this.uNodeCamPos, camPos.x, camPos.y, camPos.z);
-      gl.uniform1f(this.uNodeTorsion, torsion);
-      gl.uniform1f(this.uNodeEnableNewton, enableNewton);
       gl.uniform1i(this.uNodeSelNode, selNode);
       gl.uniform1i(this.uNodeActiveTri, activeTri);
 

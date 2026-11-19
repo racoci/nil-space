@@ -14,11 +14,10 @@ export class NilHUD {
   private mathInspectorEl!: HTMLElement;
   private infoModalEl!: HTMLElement;
   private perfBadgeEl!: HTMLElement;
-  private btnModeNewton!: HTMLElement;
   private btnModeRaymarch!: HTMLElement;
-  private btnModeEuclid!: HTMLElement;
+  private btnModeRaster!: HTMLElement;
 
-  private currentRenderMode: RenderMode = 'raster_newton';
+  private currentRenderMode: RenderMode = 'raymarch';
   public get renderMode(): RenderMode {
     return this.currentRenderMode;
   }
@@ -44,12 +43,7 @@ export class NilHUD {
 
   public updatePerformance(fps: number, frameTimeMs: number, mode: RenderMode): void {
     if (this.perfBadgeEl) {
-      const modeLabel =
-        mode === 'raster_newton'
-          ? 'Native Nil Safe-Newton (GPU)'
-          : mode === 'raymarch'
-          ? 'Curved Raymarcher (ODE)'
-          : 'Euclidean Ambient';
+      const modeLabel = mode === 'raymarch' ? 'Curved Geodesic Raymarcher' : 'Instanced GPU';
       this.perfBadgeEl.textContent = `${fps} FPS · ${frameTimeMs.toFixed(1)}ms · ${modeLabel}`;
     }
   }
@@ -86,14 +80,11 @@ export class NilHUD {
               <span>Render Engine Pipeline</span>
             </div>
             <div class="mode-toggle-group">
-              <button id="btn-mode-newton" class="mode-toggle-btn active" title="Native Nil Safe-Newton Inverse Exponential Vertex Shader">
-                Safe Newton (GPU)
+              <button id="btn-mode-raymarch" class="mode-toggle-btn active" title="Curved Nil Geodesic Raymarching Shader">
+                Curved Raymarcher
               </button>
-              <button id="btn-mode-raymarch" class="mode-toggle-btn" title="Curved Nil Geodesic Raymarching Shader">
-                Raymarch (ODE)
-              </button>
-              <button id="btn-mode-euclid" class="mode-toggle-btn" title="Euclidean Perspective Baseline">
-                Euclid Ambient
+              <button id="btn-mode-raster" class="mode-toggle-btn" title="Hardware Instanced WebGL2 Rasterizer">
+                Instanced GPU
               </button>
             </div>
           </div>
@@ -194,9 +185,8 @@ export class NilHUD {
     this.mathInspectorEl = this.container.querySelector('#math-inspector')!;
     this.infoModalEl = this.container.querySelector('#modal-info')!;
     this.perfBadgeEl = this.container.querySelector('#hud-perf-badge')!;
-    this.btnModeNewton = this.container.querySelector('#btn-mode-newton')!;
     this.btnModeRaymarch = this.container.querySelector('#btn-mode-raymarch')!;
-    this.btnModeEuclid = this.container.querySelector('#btn-mode-euclid')!;
+    this.btnModeRaster = this.container.querySelector('#btn-mode-raster')!;
 
     this.bindEvents();
   }
@@ -215,20 +205,24 @@ export class NilHUD {
       if (this.onResetCamera) this.onResetCamera();
     });
 
-    // Render Mode Toggle: 3 Modes
-    const setMode = (mode: RenderMode) => {
-      this.currentRenderMode = mode;
-      this.btnModeNewton.classList.toggle('active', mode === 'raster_newton');
-      this.btnModeRaymarch.classList.toggle('active', mode === 'raymarch');
-      this.btnModeEuclid.classList.toggle('active', mode === 'raster_euclid');
+    // Render Mode Toggle
+    this.btnModeRaymarch.addEventListener('click', () => {
+      this.currentRenderMode = 'raymarch';
+      this.btnModeRaymarch.classList.add('active');
+      this.btnModeRaster.classList.remove('active');
       if (this.onRenderModeChange) {
-        this.onRenderModeChange(mode);
+        this.onRenderModeChange('raymarch');
       }
-    };
+    });
 
-    this.btnModeNewton.addEventListener('click', () => setMode('raster_newton'));
-    this.btnModeRaymarch.addEventListener('click', () => setMode('raymarch'));
-    this.btnModeEuclid.addEventListener('click', () => setMode('raster_euclid'));
+    this.btnModeRaster.addEventListener('click', () => {
+      this.currentRenderMode = 'raster';
+      this.btnModeRaster.classList.add('active');
+      this.btnModeRaymarch.classList.remove('active');
+      if (this.onRenderModeChange) {
+        this.onRenderModeChange('raster');
+      }
+    });
 
     // Sliders
     const inputTriangles = this.container.querySelector('#input-triangles') as HTMLInputElement;
