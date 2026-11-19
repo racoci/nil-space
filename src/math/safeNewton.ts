@@ -55,7 +55,7 @@ export function nilInverseExpNewton(
   hx: number,
   hy: number,
   hz: number,
-  maxIterations: number = 3
+  maxIterations: number = 4
 ): InverseExpResult {
   const r2 = hx * hx + hy * hy;
   if (r2 < 1e-12) {

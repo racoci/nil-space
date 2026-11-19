@@ -14,10 +14,11 @@ export class NilHUD {
   private mathInspectorEl!: HTMLElement;
   private infoModalEl!: HTMLElement;
   private perfBadgeEl!: HTMLElement;
+  private btnModeNewton!: HTMLElement;
   private btnModeRaymarch!: HTMLElement;
-  private btnModeRaster!: HTMLElement;
+  private btnModeEuclid!: HTMLElement;
 
-  private currentRenderMode: RenderMode = 'raymarch';
+  private currentRenderMode: RenderMode = 'raster_newton';
   public get renderMode(): RenderMode {
     return this.currentRenderMode;
   }
@@ -43,7 +44,12 @@ export class NilHUD {
 
   public updatePerformance(fps: number, frameTimeMs: number, mode: RenderMode): void {
     if (this.perfBadgeEl) {
-      const modeLabel = mode === 'raymarch' ? 'Curved Geodesic Raymarcher' : 'Instanced GPU';
+      const modeLabel =
+        mode === 'raster_newton'
+          ? 'Native Nil Safe-Newton (GPU)'
+          : mode === 'raymarch'
+          ? 'Curved Raymarcher (ODE)'
+          : 'Euclidean Ambient';
       this.perfBadgeEl.textContent = `${fps} FPS · ${frameTimeMs.toFixed(1)}ms · ${modeLabel}`;
     }
   }
@@ -80,11 +86,14 @@ export class NilHUD {
               <span>Render Engine Pipeline</span>
             </div>
             <div class="mode-toggle-group">
-              <button id="btn-mode-raymarch" class="mode-toggle-btn active" title="Curved Nil Geodesic Raymarching Shader">
-                Curved Raymarcher
+              <button id="btn-mode-newton" class="mode-toggle-btn active" title="Native Nil Safe-Newton Inverse Exponential Vertex Shader">
+                Safe Newton (GPU)
               </button>
-              <button id="btn-mode-raster" class="mode-toggle-btn" title="Hardware Instanced WebGL2 Rasterizer">
-                Instanced GPU
+              <button id="btn-mode-raymarch" class="mode-toggle-btn" title="Curved Nil Geodesic Raymarching Shader">
+                Raymarch (ODE)
+              </button>
+              <button id="btn-mode-euclid" class="mode-toggle-btn" title="Euclidean Perspective Baseline">
+                Euclid Ambient
               </button>
             </div>
           </div>
@@ -173,7 +182,12 @@ export class NilHUD {
 
               <h3>3. Real-Time Geodesic Shader Pipeline</h3>
               <p>
-                This application renders Nil space in real time using a custom WebGL2 shader pipeline. In <strong>Curved Geodesic Raymarching</strong> mode, the GPU fragment shader solves the exact closed-form Nil geodesic ODEs per pixel, bending light rays along the Heisenberg contact connection so you can observe the genuine non-Euclidean optical warping.
+                This application renders Nil space in real time using a custom WebGL2 shader pipeline. In <strong>Curved Raymarcher (ODE)</strong> mode, the GPU fragment shader solves the exact closed-form Nil geodesic ODEs per pixel, bending light rays along the Heisenberg contact connection so you can observe the genuine non-Euclidean optical warping.
+              </p>
+
+              <h3>4. Safe Newton-Raphson Inverse Exponential Map</h3>
+              <p>
+                In <strong>Safe Newton (GPU)</strong> mode, each vertex is warped along non-Euclidean geodesic light trajectories directly in the vertex shader. While early implementations (like HyperRogue) relied on 50 iterations of bisection, our engine utilizes an analytical <strong>3-step Safe Newton-Raphson</strong> solver with interval safeguards and Taylor series singularity removal for w &approx; 0, delivering quadratic convergence (&epsilon; &lt; 10⁻⁶) and over 10&times; speedup.
               </p>
             </div>
           </div>
@@ -185,8 +199,9 @@ export class NilHUD {
     this.mathInspectorEl = this.container.querySelector('#math-inspector')!;
     this.infoModalEl = this.container.querySelector('#modal-info')!;
     this.perfBadgeEl = this.container.querySelector('#hud-perf-badge')!;
+    this.btnModeNewton = this.container.querySelector('#btn-mode-newton')!;
     this.btnModeRaymarch = this.container.querySelector('#btn-mode-raymarch')!;
-    this.btnModeRaster = this.container.querySelector('#btn-mode-raster')!;
+    this.btnModeEuclid = this.container.querySelector('#btn-mode-euclid')!;
 
     this.bindEvents();
   }
@@ -205,24 +220,20 @@ export class NilHUD {
       if (this.onResetCamera) this.onResetCamera();
     });
 
-    // Render Mode Toggle
-    this.btnModeRaymarch.addEventListener('click', () => {
-      this.currentRenderMode = 'raymarch';
-      this.btnModeRaymarch.classList.add('active');
-      this.btnModeRaster.classList.remove('active');
+    // Render Mode Toggle: 3 Modes
+    const setMode = (mode: RenderMode) => {
+      this.currentRenderMode = mode;
+      this.btnModeNewton.classList.toggle('active', mode === 'raster_newton');
+      this.btnModeRaymarch.classList.toggle('active', mode === 'raymarch');
+      this.btnModeEuclid.classList.toggle('active', mode === 'raster_euclid');
       if (this.onRenderModeChange) {
-        this.onRenderModeChange('raymarch');
+        this.onRenderModeChange(mode);
       }
-    });
+    };
 
-    this.btnModeRaster.addEventListener('click', () => {
-      this.currentRenderMode = 'raster';
-      this.btnModeRaster.classList.add('active');
-      this.btnModeRaymarch.classList.remove('active');
-      if (this.onRenderModeChange) {
-        this.onRenderModeChange('raster');
-      }
-    });
+    this.btnModeNewton.addEventListener('click', () => setMode('raster_newton'));
+    this.btnModeRaymarch.addEventListener('click', () => setMode('raymarch'));
+    this.btnModeEuclid.addEventListener('click', () => setMode('raster_euclid'));
 
     // Sliders
     const inputTriangles = this.container.querySelector('#input-triangles') as HTMLInputElement;

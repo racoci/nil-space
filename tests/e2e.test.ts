@@ -129,17 +129,22 @@ async function runE2ETests() {
     assert(isModalHidden, 'Theory modal must close on close button click');
     console.log('✅ Theoretical Foundations modal toggle verified');
 
-    // 8. Test Render Engine Pipeline Mode Switching (Raymarcher vs Instanced GPU)
-    await page.click('#btn-mode-raster');
-    await page.waitForFunction(() => document.querySelector('#btn-mode-raster')?.classList.contains('active'));
-    const isRasterActive = await page.$eval('#btn-mode-raster', (el) => el.classList.contains('active'));
-    assert(isRasterActive, 'Instanced GPU mode must become active on click');
+    // 8. Test Render Engine Pipeline Mode Switching (Safe Newton vs Euclid vs Raymarcher)
+    await page.click('#btn-mode-newton');
+    await page.waitForFunction(() => document.querySelector('#btn-mode-newton')?.classList.contains('active'));
+    const isNewtonActive = await page.$eval('#btn-mode-newton', (el) => el.classList.contains('active'));
+    assert(isNewtonActive, 'Safe Newton GPU mode must become active on click');
+
+    await page.click('#btn-mode-euclid');
+    await page.waitForFunction(() => document.querySelector('#btn-mode-euclid')?.classList.contains('active'));
+    const isEuclidActive = await page.$eval('#btn-mode-euclid', (el) => el.classList.contains('active'));
+    assert(isEuclidActive, 'Euclidean Ambient mode must become active on click');
 
     await page.click('#btn-mode-raymarch');
     await page.waitForFunction(() => document.querySelector('#btn-mode-raymarch')?.classList.contains('active'));
     const isRaymarchActive = await page.$eval('#btn-mode-raymarch', (el) => el.classList.contains('active'));
     assert(isRaymarchActive, 'Curved Raymarcher mode must become active on click');
-    console.log('✅ Render Engine Pipeline mode switching verified');
+    console.log('✅ Render Engine Pipeline mode switching (Newton/Euclid/Raymarch) verified');
 
     // 8b. Test Camera Reset
     await page.click('#btn-reset-cam');
