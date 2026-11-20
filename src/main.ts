@@ -3,6 +3,7 @@ import { NilRenderPipeline } from './rendering/pipeline';
 import { NilPicker } from './rendering/picking';
 import { NilHUD } from './ui/hud';
 import { generateNilHypergraph } from './hypergraph/generator';
+import { buildComplexGraph, computeGraphAnalytics } from './hypergraph/complexGraphs';
 import type { HypergraphGeneratorConfig, HypergraphState } from './hypergraph/types';
 import { initNilWasm } from './wasm/loader';
 
@@ -60,6 +61,8 @@ class HyperbolicNilApp {
   }
 
   private syncState(): void {
+    const analytics = computeGraphAnalytics(this.currentState);
+    this.hud.setAnalytics(analytics);
     this.pipeline.setHypergraph(this.currentState);
     this.picker.setState(this.currentState);
     this.hud.setState(this.currentState);
@@ -71,10 +74,35 @@ class HyperbolicNilApp {
       this.pipeline.setRenderMode(mode);
     };
 
+    // Toggle Geodesic Light Rays (Opção A)
+    this.hud.onToggleLightRays = () => {
+      this.pipeline.toggleGeodesicRays();
+    };
+
+    // Complex Graph Topology Change
+    this.hud.onTopologyChange = (topology) => {
+      this.currentState = buildComplexGraph({
+        topology,
+        nodeCount: topology === 'penrose_lattice' ? 72 : 150,
+        torsion: this.config.torsion,
+        seed: this.config.seed
+      });
+      this.syncState();
+    };
+
     // Config change from HUD sliders
     this.hud.onConfigChange = (newConfig) => {
       this.config = newConfig;
-      this.currentState = generateNilHypergraph(this.config);
+      if (this.hud.currentTopology === 'penrose_lattice') {
+        this.currentState = generateNilHypergraph(this.config);
+      } else {
+        this.currentState = buildComplexGraph({
+          topology: this.hud.currentTopology,
+          nodeCount: 150,
+          torsion: newConfig.torsion,
+          seed: newConfig.seed
+        });
+      }
       this.syncState();
     };
 

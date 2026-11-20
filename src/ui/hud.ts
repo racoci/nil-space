@@ -1,4 +1,5 @@
 import type { HypergraphState, HypergraphGeneratorConfig } from '../hypergraph/types';
+import type { ComplexGraphTopology, GraphAnalytics } from '../hypergraph/complexGraphs';
 import type { RenderMode } from '../rendering/pipeline';
 
 export class NilHUD {
@@ -8,6 +9,8 @@ export class NilHUD {
   public onSelectTriangle: ((triId: number) => void) | null = null;
   public onResetCamera: (() => void) | null = null;
   public onWalkCommutatorLoop: (() => void) | null = null;
+  public onToggleLightRays: (() => void) | null = null;
+  public onTopologyChange: ((topology: ComplexGraphTopology) => void) | null = null;
   public onRenderModeChange: ((mode: RenderMode) => void) | null = null;
 
   // Cached DOM elements
@@ -18,11 +21,16 @@ export class NilHUD {
   private btnModeNewton!: HTMLElement;
   private btnModeRaymarch!: HTMLElement;
   private btnModeEuclid!: HTMLElement;
+  private btnToggleRays!: HTMLElement;
+  private selectTopologyEl!: HTMLSelectElement;
 
   private currentRenderMode: RenderMode = 'raster_newton';
   public get renderMode(): RenderMode {
     return this.currentRenderMode;
   }
+
+  public currentTopology: ComplexGraphTopology = 'penrose_lattice';
+  public currentAnalytics: GraphAnalytics | null = null;
 
   private currentConfig: HypergraphGeneratorConfig = {
     numTriangles: 6,
@@ -68,6 +76,10 @@ export class NilHUD {
           </div>
           <div class="header-actions">
             <div id="hud-perf-badge" class="perf-badge">60 FPS · Initializing...</div>
+            <button id="btn-toggle-rays" class="btn-ghost" title="Toggle curved geodesic light rays connecting observer to nodes (Opção A)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+              <span>Light Rays</span>
+            </button>
             <button id="btn-walk-loop" class="btn-ghost" title="Traverse closed horizontal loop (+X,+Y,-X,-Y) to demonstrate [X, Y] = cZ">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
               <span>Walk [X,Y] Loop</span>
@@ -85,6 +97,20 @@ export class NilHUD {
 
         <!-- Left Panel: Triangle Navigator & Math Inspector -->
         <aside class="hud-sidebar glass-panel">
+          <!-- Complex Graph Topology Selector -->
+          <div class="panel-section">
+            <div class="section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              <span>Complex Graph Topology</span>
+            </div>
+            <select id="select-topology" class="hud-select">
+              <option value="penrose_lattice">Penrose Tribar Lattice (Chiral Nil)</option>
+              <option value="barabasi_albert">Barabási-Albert (Scale-Free Hubs)</option>
+              <option value="watts_strogatz">Watts-Strogatz (Small-World)</option>
+              <option value="nil_geometric">Nil Geometric (Koranyi Gauge RGG)</option>
+            </select>
+          </div>
+
           <!-- Render Pipeline Selector -->
           <div class="panel-section">
             <div class="section-title">
@@ -213,6 +239,8 @@ export class NilHUD {
     this.btnModeNewton = this.container.querySelector('#btn-mode-newton')!;
     this.btnModeRaymarch = this.container.querySelector('#btn-mode-raymarch')!;
     this.btnModeEuclid = this.container.querySelector('#btn-mode-euclid')!;
+    this.btnToggleRays = this.container.querySelector('#btn-toggle-rays')!;
+    this.selectTopologyEl = this.container.querySelector('#select-topology')!;
 
     this.bindEvents();
   }
@@ -234,6 +262,18 @@ export class NilHUD {
     const btnWalkLoop = this.container.querySelector('#btn-walk-loop')!;
     btnWalkLoop.addEventListener('click', () => {
       if (this.onWalkCommutatorLoop) this.onWalkCommutatorLoop();
+    });
+
+    this.btnToggleRays.addEventListener('click', () => {
+      this.btnToggleRays.classList.toggle('active');
+      if (this.onToggleLightRays) this.onToggleLightRays();
+    });
+
+    this.selectTopologyEl.addEventListener('change', () => {
+      this.currentTopology = this.selectTopologyEl.value as ComplexGraphTopology;
+      if (this.onTopologyChange) {
+        this.onTopologyChange(this.currentTopology);
+      }
     });
 
     // Render Mode Toggle: 3 Modes
@@ -292,6 +332,11 @@ export class NilHUD {
       this.currentConfig.seed = Math.floor(Math.random() * 999999);
       emitConfig();
     });
+  }
+
+  public setAnalytics(analytics: GraphAnalytics): void {
+    this.currentAnalytics = analytics;
+    this.updateHUD();
   }
 
   public showCommutatorResult(dz: number): void {
@@ -368,19 +413,35 @@ export class NilHUD {
         </div>
       `;
     } else {
+      const a = this.currentAnalytics;
       this.mathInspectorEl.innerHTML = `
         <div class="math-row">
-          <span class="math-k">Total Nodes:</span>
-          <span class="math-v">${this.state.nodes.length}</span>
+          <span class="math-k">Topology:</span>
+          <span class="math-v highlight">${this.currentTopology.replace('_', ' ').toUpperCase()}</span>
         </div>
+        <div class="math-row">
+          <span class="math-k">Nodes / Edges:</span>
+          <span class="math-v">${this.state.nodes.length} nodes · ${this.state.edges.length} edges</span>
+        </div>
+        ${
+          a
+            ? `
+        <div class="math-row">
+          <span class="math-k">Max / Avg Deg:</span>
+          <span class="math-v">${a.maxDegree} max · ${a.avgDegree.toFixed(2)} avg</span>
+        </div>
+        <div class="math-row">
+          <span class="math-k">Clustering Coeff:</span>
+          <span class="math-v">${a.clusteringCoefficient.toFixed(3)}</span>
+        </div>
+        `
+            : `
         <div class="math-row">
           <span class="math-k">Macro Triads:</span>
           <span class="math-v">${this.state.triangles.length}</span>
         </div>
-        <div class="math-row">
-          <span class="math-k">Hyperedges:</span>
-          <span class="math-v">${this.state.hyperedges.length}</span>
-        </div>
+        `
+        }
         <div class="math-row">
           <span class="math-k">Manifold:</span>
           <span class="math-v highlight">${(this.currentConfig.baseCurvature ?? 0) === 0 ? 'Nil Space (Heisenberg H₃)' : 'Hyperbolic-Nil (SL̃₂(ℝ))'}</span>
@@ -389,7 +450,7 @@ export class NilHUD {
           <span class="math-k">Geometry Metric:</span>
           <span class="math-v">${(this.currentConfig.baseCurvature ?? 0) === 0 ? 'ds² = dx² + dy² + (dz - c·x dy)²' : 'ds² = λ²(dx²+dy²) + (dz - 2c·λ(x dy - y dx))²'}</span>
         </div>
-        <p class="math-note">Select any triangle to inspect its Nil holonomy and snap canonical view.</p>
+        <p class="math-note">Select any node/triangle or toggle Light Rays to inspect non-Euclidean geodesics.</p>
       `;
     }
   }

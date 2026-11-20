@@ -17,7 +17,9 @@ async function runAllUnitTests() {
     { name: 'Nil Geodesic Rays & Scratch Math Invariants', file: './nil_geodesic_ray.test.ts' },
     { name: 'Safe Newton-Raphson vs 50-Step Bisection', file: './newton_vs_bisection.test.ts' },
     { name: 'Lie Commutator Loop & Metric Invariance', file: './holonomy_commutator.test.ts' },
-    { name: 'Hyperbolic-Nil Space (SL̃₂(ℝ) ↔ Nil) Family', file: './hyperbolic_nil_family.test.ts' }
+    { name: 'Hyperbolic-Nil Space (SL̃₂(ℝ) ↔ Nil) Family', file: './hyperbolic_nil_family.test.ts' },
+    { name: 'Geodesic Light Ray Visualizer & Invariants', file: './geodesic_rays_visualizer.test.ts' },
+    { name: 'Complex Graph Topologies & Analytics', file: './complex_graphs.test.ts' }
   ];
 
   const startTime = performance.now();

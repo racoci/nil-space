@@ -172,6 +172,30 @@ async function runE2ETests() {
     assert(inspectorText2.includes('Non-Abelian Lie Algebra Verified'), 'Math inspector must confirm Non-Abelian Lie algebra');
     console.log('✅ Interactive Lie Commutator Loop Walk verified');
 
+    // 8d. Test Geodesic Light Rays Toggle (Opção A)
+    await page.click('#btn-toggle-rays');
+    await page.waitForFunction(() => document.querySelector('#btn-toggle-rays')?.classList.contains('active'));
+    const isRaysActive = await page.$eval('#btn-toggle-rays', (el) => el.classList.contains('active'));
+    assert(isRaysActive, 'Geodesic light rays button must be active');
+
+    await page.click('#btn-toggle-rays');
+    await page.waitForFunction(() => !document.querySelector('#btn-toggle-rays')?.classList.contains('active'));
+    console.log('✅ Geodesic Light Rays toggle interaction verified');
+
+    // 8e. Test Complex Graph Topology Switching
+    await page.select('#select-topology', 'barabasi_albert');
+    await page.waitForFunction(() => document.querySelector('#math-inspector')?.textContent?.includes('BARABASI ALBERT'));
+    const inspectorBA = await page.$eval('#math-inspector', (el) => el.textContent || '');
+    assert(inspectorBA.includes('BARABASI ALBERT'), 'Inspector must show Barabasi-Albert topology');
+    assert(inspectorBA.includes('Max / Avg Deg:'), 'Inspector must show scale-free hub degree metrics');
+
+    await page.select('#select-topology', 'watts_strogatz');
+    await page.waitForFunction(() => document.querySelector('#math-inspector')?.textContent?.includes('WATTS STROGATZ'));
+    const inspectorWS = await page.$eval('#math-inspector', (el) => el.textContent || '');
+    assert(inspectorWS.includes('WATTS STROGATZ'), 'Inspector must show Watts-Strogatz topology');
+    assert(inspectorWS.includes('Clustering Coeff:'), 'Inspector must show small-world clustering metric');
+    console.log('✅ Complex Graph Topologies (Barabasi-Albert & Watts-Strogatz) switching verified');
+
     // 9. Verify zero console errors
     assert(consoleErrors.length === 0, `Encountered console errors during run: ${consoleErrors.join(', ')}`);
     console.log('✅ Zero console errors or uncaught exceptions detected');

@@ -121,6 +121,32 @@ body, html {
   color: #fff;
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
+
+.btn-ghost.active {
+  background: rgba(0, 255, 230, 0.25);
+  border-color: var(--cyan-glow);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(0, 255, 230, 0.4);
+}
+
+.hud-select {
+  width: 100%;
+  background: rgba(10, 20, 35, 0.85);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--cyan-glow);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  padding: 0.45rem 0.5rem;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hud-select:hover, .hud-select:focus {
+  border-color: var(--cyan-glow);
+  box-shadow: 0 0 10px rgba(0, 255, 230, 0.25);
+}
 .perf-badge {
   display: inline-flex;
   align-items: center;

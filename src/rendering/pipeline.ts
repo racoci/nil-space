@@ -1,5 +1,6 @@
 import type { HypergraphState } from '../hypergraph/types';
 import { SmoothCameraController } from './cameraController';
+import { GeodesicRayVisualizer } from './geodesicRayVisualizer';
 import {
   RAYMARCH_VERTEX_SHADER,
   RAYMARCH_FRAGMENT_SHADER,
@@ -20,6 +21,13 @@ export class NilRenderPipeline {
 
   public renderMode: RenderMode = 'raster_newton';
   public onPerformanceUpdate: ((fps: number, frameTimeMs: number) => void) | null = null;
+
+  // Geodesic Light Rays Visualizer (Opção A)
+  public showGeodesicRays = false;
+  private rayVisualizer = new GeodesicRayVisualizer(1.0);
+  private rayVAO: WebGLVertexArrayObject | null = null;
+  private rayPosVBO: WebGLBuffer | null = null;
+  private rayVertexCount = 0;
 
   // Cached state
   private currentState: HypergraphState | null = null;
@@ -163,9 +171,25 @@ export class NilRenderPipeline {
       this.setupQuadBuffer();
       this.setupNodeBuffers();
       this.setupEdgeBuffers();
+      this.setupRayBuffers();
     } catch (e) {
       console.error('Failed to compile shaders:', e);
     }
+  }
+
+  private setupRayBuffers(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    this.rayVAO = gl.createVertexArray();
+    gl.bindVertexArray(this.rayVAO);
+
+    this.rayPosVBO = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.rayPosVBO);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindVertexArray(null);
   }
 
   private setupQuadBuffer(): void {
@@ -277,6 +301,28 @@ export class NilRenderPipeline {
     gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
 
     gl.bindVertexArray(null);
+  }
+
+  public toggleGeodesicRays(): boolean {
+    this.showGeodesicRays = !this.showGeodesicRays;
+    this.updateRayBuffer();
+    return this.showGeodesicRays;
+  }
+
+  public updateRayBuffer(): void {
+    const gl = this.gl;
+    if (!gl || !this.showGeodesicRays || !this.currentState || this.currentState.nodes.length === 0 || !this.rayPosVBO) {
+      this.rayVertexCount = 0;
+      return;
+    }
+
+    const targets = this.currentState.nodes.slice(0, 32);
+    const camPos = this.cameraController.position;
+    const buffer = this.rayVisualizer.generateLinesBuffer(camPos, targets, 16);
+
+    this.rayVertexCount = buffer.length / 3;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.rayPosVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, buffer, gl.DYNAMIC_DRAW);
   }
 
   public setRenderMode(mode: RenderMode): void {
@@ -529,6 +575,25 @@ export class NilRenderPipeline {
       gl.bindVertexArray(this.edgeVAO);
       gl.drawArrays(gl.LINES, 0, this.edgeVertexCount);
       gl.bindVertexArray(null);
+    }
+
+    // 1b. Draw Geodesic Light Rays if enabled
+    if (this.showGeodesicRays && this.rayVAO && this.edgeProgram) {
+      this.updateRayBuffer();
+      if (this.rayVertexCount > 0) {
+        gl.useProgram(this.edgeProgram);
+        gl.uniformMatrix4fv(this.uEdgeViewProj, false, vp);
+        gl.uniformMatrix4fv(this.uEdgeView, false, view);
+        gl.uniformMatrix4fv(this.uEdgeProj, false, proj);
+        gl.uniform3f(this.uEdgeCamPos, camPos.x, camPos.y, camPos.z);
+        gl.uniform1f(this.uEdgeTorsion, torsion);
+        gl.uniform1f(this.uEdgeEnableNewton, 0.0); // Points are already generated as true 3D curves
+        gl.uniform1i(this.uEdgeActiveTri, -1);
+
+        gl.bindVertexArray(this.rayVAO);
+        gl.drawArrays(gl.LINES, 0, this.rayVertexCount);
+        gl.bindVertexArray(null);
+      }
     }
 
     // 2. Draw Instanced Nodes
