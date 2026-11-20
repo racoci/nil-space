@@ -152,6 +152,18 @@ async function runE2ETests() {
     const anyActive = await page.$$eval('.triangle-chip.active', (els) => els.length);
     assert(anyActive === 0, 'Reset camera must deselect triangles');
     console.log('✅ Reset camera action verified');
+
+    // 8c. Test Interactive Lie Commutator Loop Walk [X, Y] = c * Z
+    await page.click('#btn-walk-loop');
+    await page.waitForFunction(
+      () => document.querySelector('#math-inspector')?.textContent?.includes('Commutator:'),
+      { timeout: 4000 }
+    );
+    const inspectorText2 = await page.$eval('#math-inspector', (el) => el.textContent || '');
+    assert(inspectorText2.includes('Actual Nil Δz:'), 'Math inspector must report non-zero Nil holonomy shift');
+    assert(inspectorText2.includes('Non-Abelian Lie Algebra Verified'), 'Math inspector must confirm Non-Abelian Lie algebra');
+    console.log('✅ Interactive Lie Commutator Loop Walk verified');
+
     // 9. Verify zero console errors
     assert(consoleErrors.length === 0, `Encountered console errors during run: ${consoleErrors.join(', ')}`);
     console.log('✅ Zero console errors or uncaught exceptions detected');

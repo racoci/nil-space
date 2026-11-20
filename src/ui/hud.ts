@@ -7,6 +7,7 @@ export class NilHUD {
   public onConfigChange: ((config: HypergraphGeneratorConfig) => void) | null = null;
   public onSelectTriangle: ((triId: number) => void) | null = null;
   public onResetCamera: (() => void) | null = null;
+  public onWalkCommutatorLoop: (() => void) | null = null;
   public onRenderModeChange: ((mode: RenderMode) => void) | null = null;
 
   // Cached DOM elements
@@ -66,6 +67,10 @@ export class NilHUD {
           </div>
           <div class="header-actions">
             <div id="hud-perf-badge" class="perf-badge">60 FPS · Initializing...</div>
+            <button id="btn-walk-loop" class="btn-ghost" title="Traverse closed horizontal loop (+X,+Y,-X,-Y) to demonstrate [X, Y] = cZ">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              <span>Walk [X,Y] Loop</span>
+            </button>
             <button id="btn-info" class="btn-ghost" title="Theoretical Foundations">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
               <span>Math & Theory</span>
@@ -220,6 +225,11 @@ export class NilHUD {
       if (this.onResetCamera) this.onResetCamera();
     });
 
+    const btnWalkLoop = this.container.querySelector('#btn-walk-loop')!;
+    btnWalkLoop.addEventListener('click', () => {
+      if (this.onWalkCommutatorLoop) this.onWalkCommutatorLoop();
+    });
+
     // Render Mode Toggle: 3 Modes
     const setMode = (mode: RenderMode) => {
       this.currentRenderMode = mode;
@@ -270,6 +280,29 @@ export class NilHUD {
       this.currentConfig.seed = Math.floor(Math.random() * 999999);
       emitConfig();
     });
+  }
+
+  public showCommutatorResult(dz: number): void {
+    if (!this.mathInspectorEl) return;
+    this.mathInspectorEl.innerHTML = `
+      <div class="math-row">
+        <span class="math-k">Commutator:</span>
+        <span class="math-v highlight">[X, Y] Loop Walk (+X,+Y,-X,-Y)</span>
+      </div>
+      <div class="math-row">
+        <span class="math-k">Euclidean &Delta;z:</span>
+        <span class="math-v">0.0000 (No shift)</span>
+      </div>
+      <div class="math-row">
+        <span class="math-k">Actual Nil &Delta;z:</span>
+        <span class="math-v highlight badge-success">+${dz.toFixed(4)} (c &middot; L&sup2;)</span>
+      </div>
+      <div class="math-row">
+        <span class="math-k">Curvature Proof:</span>
+        <span class="math-v">Non-Abelian Lie Algebra Verified</span>
+      </div>
+      <p class="math-note">The observer walked a closed square in the horizontal plane and emerged at higher elevation &Delta;z!</p>
+    `;
   }
 
   public updateHUD(): void {

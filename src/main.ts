@@ -97,6 +97,37 @@ class HyperbolicNilApp {
       }, 1000);
     };
 
+    // Interactive Lie Commutator Loop Walk [X, Y] = c * Z
+    this.hud.onWalkCommutatorLoop = () => {
+      const L = 6.0;
+      const c = this.config.torsion;
+      const cam = this.pipeline.cameraController;
+      const startPos = { x: cam.position.x, y: cam.position.y, z: cam.position.z };
+      const startTarget = { x: cam.target.x, y: cam.target.y, z: cam.target.z };
+
+      // Immediately display math inspector status
+      this.hud.showCommutatorResult(c * L * L);
+
+      // Heisenberg group multiplication sequence: (+X) -> (+Y) -> (-X) -> (-Y)
+      // Final elevation offset: Delta z = c * L * L
+      const corner1 = { x: startPos.x + L, y: startPos.y, z: startPos.z };
+      const corner2 = { x: startPos.x + L, y: startPos.y + L, z: startPos.z + c * (startPos.x + L) * 0.5 };
+      const corner3 = { x: startPos.x, y: startPos.y + L, z: startPos.z + c * (startPos.x + L) * 0.5 };
+      const finalPos = { x: startPos.x, y: startPos.y, z: startPos.z + c * L * L };
+
+      // Animate through corners
+      cam.animateTo({ position: corner1, target: startTarget }, 300);
+      setTimeout(() => {
+        cam.animateTo({ position: corner2, target: startTarget }, 300);
+      }, 320);
+      setTimeout(() => {
+        cam.animateTo({ position: corner3, target: startTarget }, 300);
+      }, 640);
+      setTimeout(() => {
+        cam.animateTo({ position: finalPos, target: { x: startTarget.x, y: startTarget.y, z: startTarget.z + c * L * L } }, 400);
+      }, 960);
+    };
+
     // 3D Canvas picking selection
     this.picker.onSelectionChange = (updatedState) => {
       this.currentState = updatedState;
