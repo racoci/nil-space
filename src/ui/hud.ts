@@ -28,6 +28,7 @@ export class NilHUD {
     numTriangles: 6,
     sideLength: 5.0,
     torsion: 1.0,
+    baseCurvature: 0.0,
     randomDensity: 0.5,
     seed: 42,
     spacingFactor: 1.0
@@ -136,6 +137,11 @@ export class NilHUD {
             <div class="slider-row">
               <label>Nil Torsion (c): <span id="val-torsion">1.0</span></label>
               <input type="range" id="input-torsion" min="0.1" max="2.5" value="1.0" step="0.1" />
+            </div>
+
+            <div class="slider-row">
+              <label>Base Curvature (&kappa;): <span id="val-kappa">0.00 (Nil)</span></label>
+              <input type="range" id="input-kappa" min="-1.0" max="0.0" value="0.0" step="0.05" />
             </div>
 
             <div class="slider-row">
@@ -248,21 +254,26 @@ export class NilHUD {
     // Sliders
     const inputTriangles = this.container.querySelector('#input-triangles') as HTMLInputElement;
     const inputTorsion = this.container.querySelector('#input-torsion') as HTMLInputElement;
+    const inputKappa = this.container.querySelector('#input-kappa') as HTMLInputElement;
     const inputScale = this.container.querySelector('#input-scale') as HTMLInputElement;
     const inputDensity = this.container.querySelector('#input-density') as HTMLInputElement;
     const btnRandomSeed = this.container.querySelector('#btn-random-seed') as HTMLButtonElement;
 
     const emitConfig = () => {
+      const kappaVal = parseFloat(inputKappa.value);
       this.currentConfig = {
         numTriangles: parseInt(inputTriangles.value, 10),
         sideLength: parseFloat(inputScale.value),
         torsion: parseFloat(inputTorsion.value),
+        baseCurvature: kappaVal,
         randomDensity: parseFloat(inputDensity.value),
         seed: this.currentConfig.seed
       };
 
       this.container.querySelector('#val-triangles')!.textContent = inputTriangles.value;
       this.container.querySelector('#val-torsion')!.textContent = inputTorsion.value;
+      const kappaLabel = kappaVal === 0 ? '0.00 (Nil)' : `${kappaVal.toFixed(2)} (SL̃₂)`;
+      this.container.querySelector('#val-kappa')!.textContent = kappaLabel;
       this.container.querySelector('#val-scale')!.textContent = inputScale.value;
       this.container.querySelector('#val-density')!.textContent = inputDensity.value;
 
@@ -273,6 +284,7 @@ export class NilHUD {
 
     inputTriangles.addEventListener('input', emitConfig);
     inputTorsion.addEventListener('input', emitConfig);
+    inputKappa.addEventListener('input', emitConfig);
     inputScale.addEventListener('input', emitConfig);
     inputDensity.addEventListener('input', emitConfig);
 
@@ -370,8 +382,12 @@ export class NilHUD {
           <span class="math-v">${this.state.hyperedges.length}</span>
         </div>
         <div class="math-row">
+          <span class="math-k">Manifold:</span>
+          <span class="math-v highlight">${(this.currentConfig.baseCurvature ?? 0) === 0 ? 'Nil Space (Heisenberg H₃)' : 'Hyperbolic-Nil (SL̃₂(ℝ))'}</span>
+        </div>
+        <div class="math-row">
           <span class="math-k">Geometry Metric:</span>
-          <span class="math-v">ds² = dx² + dy² + (dz - c·x dy)²</span>
+          <span class="math-v">${(this.currentConfig.baseCurvature ?? 0) === 0 ? 'ds² = dx² + dy² + (dz - c·x dy)²' : 'ds² = λ²(dx²+dy²) + (dz - 2c·λ(x dy - y dx))²'}</span>
         </div>
         <p class="math-note">Select any triangle to inspect its Nil holonomy and snap canonical view.</p>
       `;

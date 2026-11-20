@@ -115,7 +115,15 @@ async function runE2ETests() {
       input.value = '1.8';
       input.dispatchEvent(new Event('input'));
     });
-    console.log('✅ Lattice & Metric parameter slider interaction verified');
+
+    await page.$eval('#input-kappa', (el) => {
+      const input = el as HTMLInputElement;
+      input.value = '-0.75';
+      input.dispatchEvent(new Event('input'));
+    });
+    const kappaText = await page.$eval('#val-kappa', (el) => el.textContent);
+    assert(kappaText?.includes('SL̃₂'), `Expected SL̃₂ manifold label, got ${kappaText}`);
+    console.log('✅ Lattice & Metric (torsion and kappa Nil ↔ SL̃₂(ℝ)) parameter slider interaction verified');
 
     // 7. Test Theory Modal Open / Close
     await page.click('#btn-info');

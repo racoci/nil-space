@@ -42,6 +42,7 @@ export interface HypergraphGeneratorConfig {
   numTriangles: number;
   sideLength: number;
   torsion: number;
+  baseCurvature?: number; // 0 for Nil, negative for Hyperbolic-Nil (SL̃₂(ℝ))
   randomDensity: number;
   seed: number;
   spacingFactor?: number;
